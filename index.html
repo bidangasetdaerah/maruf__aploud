@@ -28,9 +28,8 @@
 </div>
 
 <script>
-const WEB_APP_URL = "https://script.google.com/macros/s/.../exec"; // Ganti dengan URL Web App-mu
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxvyCYYnGzgocvqPzp9lmDVmhL3MxZ8_DAkcttbAF3YB3UEmHYJngMokGux8AnwtcBJ/exec"; // Ganti dengan URL Web App-mu
 
-// Load data master dari Spreadsheet
 async function loadData() {
   try {
     const res = await fetch(`${WEB_APP_URL}?action=getMasterData`);
@@ -48,7 +47,6 @@ async function loadData() {
   }
 }
 
-// Convert file ke Base64
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,7 +56,6 @@ function fileToBase64(file) {
   });
 }
 
-// Upload file
 async function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const satuan = document.getElementById('satuan').value;
@@ -104,7 +101,6 @@ async function uploadFile() {
   }
 }
 
-// Load data saat halaman siap
 loadData();
 </script>
 
