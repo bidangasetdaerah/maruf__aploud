@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Dokumen Pendukung Inventarisasi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+  <h1 class="text-3xl font-bold mb-6">Upload Dokumen Pendukung</h1>
+
+  <!-- Form Upload Global -->
+  <div class="bg-white shadow-md rounded-lg p-6 w-full max-w-xl mb-8">
+    <label class="block mb-2 font-semibold">Pilih Satuan Pendidikan:</label>
+    <select id="satuan" class="w-full border rounded p-2 mb-4">
+      <option value="">-- Pilih Satuan --</option>
+    </select>
+
+    <label class="block mb-2 font-semibold">Pilih File:</label>
+    <input type="file" id="fileInput" class="mb-4 w-full" />
+
+    <button onclick="uploadFile()" class="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition">
+      Upload
+    </button>
+    <p id="status" class="mt-4 text-center"></p>
+  </div>
+
+  <!-- Tabel Data -->
+  <div class="bg-white shadow-md rounded-lg p-6 w-full overflow-x-auto">
+    <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
+      <h2 class="text-2xl font-semibold">Daftar Satuan Pendidikan</h2>
+      <div class="flex items-center gap-2">
+        <label for="rowsPerPage" class="text-sm">Tampilkan:</label>
+        <select id="rowsPerPage" onchange="changeRowsPerPage()" class="border p-1 rounded text-sm">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+        </select>
+        <span class="text-sm">baris</span>
+      </div>
+      <input 
+        type="text" 
+        id="searchInput" 
+        placeholder="Cari data..." 
+        class="border p-2 rounded w-64"
+        onkeyup="applySearch()" />
+    </div>
+
+    <table class="table-auto w-full border-collapse border border-gray-300 text-sm">
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="border p-2">Nama Satuan Pendidikan</th>
+          <th class="border p-2">Jenjang</th>
+          <th class="border p-2">Status</th>
+          <th class="border p-2">Kecamatan</th>
+          <th class="border p-2">Dokumen Pendukung</th>
+          <th class="border p-2">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tabelData"></tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="flex justify-between items-center mt-4">
+      <button id="prevBtn" onclick="changePage(-1)" class="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">Prev</button>
+      <span id="pageInfo" class="text-sm"></span>
+      <button id="nextBtn" onclick="changePage(1)" class="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">Next</button>
+    </div>
+  </div>
+
+<script>
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxLQuNeb3aWB1XIYa5L7zJqdfw-Itj9wd4slWqkiJBr3gbFaHrtq6Gm_OmJR7XsJZcB/exec";
+
+let allData = [];
+let filteredData = [];
+let currentPage = 1;
+let rowsPerPage = 10; // default
+
+async function loadData() {
+  try {
+    const res = await fetch(`${WEB_APP_URL}?action=getAploudData`);
+    allData = await res.json();
+    filteredData = [...allData];
+
+    // Isi dropdown satuan pendidikan
+    const select = document.getElementById('satuan');
+    select.innerHTML = `<option value="">-- Pilih Satuan --</option>`;
+    allData.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.namaSatuan;
+      option.textContent = `${item.namaSatuan} (${item.jenjang})`;
+      select.appendChild(option);
+    });
+
+    renderTable();
+  } catch (err) {
+    console.error("Gagal load data:", err);
+    document.getElementById('status').textContent = "Gagal load data tabel.";
+  }
+}
+
+function renderTable() {
+  const tabel = document.getElementById('tabelData');
+  tabel.innerHTML = "";
+
+  const start = (currentPage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
+  const paginatedData = filteredData.slice(start, end);
+
+  paginatedData.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="border p-2">${item.namaSatuan}</td>
+      <td class="border p-2">${item.jenjang}</td>
+      <td class="border p-2">${item.status}</td>
+      <td class="border p-2">${item.kecamatan}</td>
+      <td class="border p-2 text-center">
+        ${item.dokumen && item.dokumen.startsWith("http") 
+          ? `<a href="${item.dokumen}" target="_blank" class="text-blue-600 flex items-center justify-center gap-1">
+              <i class="ri-camera-fill"></i> Lihat Data
+            </a>` 
+          : "-"}
+      </td>
+      <td class="border p-2 text-center">
+        <label class="block mb-1 text-xs font-semibold">Upload Dokumen:</label>
+        <input type="file" id="file-${item.namaSatuan}" class="mb-2 text-xs" />
+        <button onclick="uploadFileSekolah('${item.namaSatuan}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700">
+          Upload
+        </button>
+        <p id="status-${item.namaSatuan}" class="text-xs mt-1 text-gray-600"></p>
+      </td>
+    `;
+    tabel.appendChild(tr);
+  });
+
+  updatePagination();
+}
+
+function updatePagination() {
+  const pageInfo = document.getElementById('pageInfo');
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+
+  pageInfo.textContent = `Halaman ${currentPage} dari ${totalPages}`;
+
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function changePage(direction) {
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  currentPage += direction;
+  if (currentPage < 1) currentPage = 1;
+  if (currentPage > totalPages) currentPage = totalPages;
+  renderTable();
+}
+
+function changeRowsPerPage() {
+  rowsPerPage = parseInt(document.getElementById('rowsPerPage').value);
+  currentPage = 1;
+  renderTable();
+}
+
+function applySearch() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  filteredData = allData.filter(item =>
+    item.namaSatuan.toLowerCase().includes(query) ||
+    item.jenjang.toLowerCase().includes(query) ||
+    item.status.toLowerCase().includes(query) ||
+    item.kecamatan.toLowerCase().includes(query)
+  );
+  currentPage = 1;
+  renderTable();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Upload dari form global
+async function uploadFile() {
+  const fileInput = document.getElementById('fileInput');
+  const satuan = document.getElementById('satuan').value;
+  const status = document.getElementById('status');
+
+  if (!fileInput.files.length) {
+    alert("Pilih file terlebih dahulu!");
+    return;
+  }
+  if (!satuan) {
+    alert("Pilih satuan pendidikan terlebih dahulu!");
+    return;
+  }
+
+  status.textContent = "Mengunggah...";
+
+  try {
+    const file = fileInput.files[0];
+    const base64 = await fileToBase64(file);
+
+    const payload = {
+      action: "uploadFile",
+      namaSatuan: satuan,
+      base64: base64.split(',')[1],
+      mimeType: file.type
+    };
+
+    const res = await fetch(WEB_APP_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      status.innerHTML = `Upload berhasil! <a href="${result.fileUrl}" target="_blank" class="text-blue-600 underline">Lihat file</a>`;
+      loadData(); // refresh tabel
+    } else {
+      status.textContent = "Gagal upload: " + result.message;
+    }
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Terjadi kesalahan saat upload.";
+  }
+}
+
+// Upload dari masing-masing sekolah
+async function uploadFileSekolah(namaSatuan) {
+  const fileInput = document.getElementById(`file-${namaSatuan}`);
+  const status = document.getElementById(`status-${namaSatuan}`);
+
+  if (!fileInput.files.length) {
+    alert("Pilih file terlebih dahulu!");
+    return;
+  }
+
+  status.textContent = "Mengunggah...";
+
+  try {
+    const file = fileInput.files[0];
+    const base64 = await fileToBase64(file);
+
+    const payload = {
+      action: "uploadFile",
+      namaSatuan: namaSatuan,
+      base64: base64.split(',')[1],
+      mimeType: file.type
+    };
+
+    const res = await fetch(WEB_APP_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      status.innerHTML = `Upload berhasil! <a href="${result.fileUrl}" target="_blank" class="text-blue-600 underline">Lihat file</a>`;
+      loadData(); // refresh tabel
+    } else {
+      status.textContent = "Gagal upload: " + result.message;
+    }
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Terjadi kesalahan saat upload.";
+  }
+}
+
+loadData();
+</script>
+
+</body>
+</html>
