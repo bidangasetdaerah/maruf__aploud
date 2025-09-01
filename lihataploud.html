@@ -33,6 +33,15 @@
       Upload
     </button>
     <p id="status" class="mt-4 text-center text-sm sm:text-base"></p>
+
+    <!-- Progress Upload -->
+    <div id="progressWrapper" class="mt-6">
+      <p id="progressText" class="text-sm font-semibold text-gray-700 mb-1"></p>
+      <div class="w-full bg-gray-200 rounded-full h-3">
+        <div id="progressBar" class="bg-green-600 h-3 rounded-full" style="width:0%"></div>
+      </div>
+      <div id="progressKecamatan" class="mt-4 text-sm text-gray-700 space-y-1"></div>
+    </div>
   </div>
 
   <!-- Container Data -->
@@ -205,6 +214,9 @@ function renderTable() {
   document.getElementById('pageInfo').textContent = `Halaman ${currentPage} dari ${totalPages}`;
   document.getElementById('prevBtn').disabled = currentPage === 1;
   document.getElementById('nextBtn').disabled = currentPage === totalPages;
+
+  // update progress
+  updateProgress();
 }
 
 function prevPage() { if (currentPage > 1) { currentPage--; renderTable(); } }
@@ -264,6 +276,36 @@ async function uploadFileSekolah(namaSatuan) {
       applyFilters();
     } else status.textContent = "Gagal upload: " + result.message;
   } catch (err) { console.error(err); status.textContent = "Terjadi kesalahan saat upload."; }
+}
+
+// Update Progress Total + Per Kecamatan
+function updateProgress() {
+  const total = filteredData.length;
+  const sudah = filteredData.filter(d => d.dokumen && d.dokumen.startsWith("http")).length;
+  const persen = total > 0 ? Math.round((sudah / total) * 100) : 0;
+
+  document.getElementById("progressText").textContent = 
+    `Progres upload dokumen: ${sudah} dari ${total} (${persen}%)`;
+
+  document.getElementById("progressBar").style.width = persen + "%";
+
+  // Progress per kecamatan
+  const kecamatanMap = {};
+  filteredData.forEach(d => {
+    if (!kecamatanMap[d.kecamatan]) kecamatanMap[d.kecamatan] = { total: 0, sudah: 0 };
+    kecamatanMap[d.kecamatan].total++;
+    if (d.dokumen && d.dokumen.startsWith("http")) kecamatanMap[d.kecamatan].sudah++;
+  });
+
+  const kecamatanDiv = document.getElementById("progressKecamatan");
+  kecamatanDiv.innerHTML = "";
+  Object.keys(kecamatanMap).sort().forEach(kec => {
+    const { total, sudah } = kecamatanMap[kec];
+    const persenKec = total > 0 ? Math.round((sudah / total) * 100) : 0;
+    const p = document.createElement("p");
+    p.textContent = `${kec}: ${sudah} dari ${total} (${persenKec}%)`;
+    kecamatanDiv.appendChild(p);
+  });
 }
 
 loadData();
