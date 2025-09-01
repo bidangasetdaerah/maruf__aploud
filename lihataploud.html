@@ -37,7 +37,10 @@
       <div class="w-full bg-gray-200 rounded-full h-3">
         <div id="progressBar" class="bg-blue-600 h-3 rounded-full" style="width:0%"></div>
       </div>
+      <!-- Progress per kecamatan -->
       <div id="progressPerKec" class="mt-4 space-y-3"></div>
+      <!-- Progress per jenjang -->
+      <div id="progressPerJenjang" class="mt-6 space-y-3"></div>
     </div>
 
     <!-- Tabel Desktop -->
@@ -92,18 +95,6 @@ async function loadData() {
     allData = await res.json();
     filteredData = allData;
 
-    // isi dropdown satuan
-    const select = document.getElementById('satuan');
-    if (select) {
-      select.innerHTML = '<option value="">-- Pilih Satuan --</option>';
-      allData.forEach(item => {
-        const option = document.createElement('option');
-        option.value = item.namaSatuan;
-        option.textContent = `${item.namaSatuan} (${item.jenjang})`;
-        select.appendChild(option);
-      });
-    }
-
     // isi dropdown kecamatan (unik)
     const kecamatanSet = [...new Set(allData.map(d => d.kecamatan))].sort();
     const filterKecamatan = document.getElementById('filterKecamatan');
@@ -154,9 +145,31 @@ function updateProgress() {
     `;
     perKecDiv.appendChild(wrap);
   }
+
+  // progress per jenjang
+  const perJenjangDiv = document.getElementById('progressPerJenjang');
+  perJenjangDiv.innerHTML = "";
+  const groupedJenjang = {};
+  allData.forEach(d => {
+    if (!groupedJenjang[d.jenjang]) groupedJenjang[d.jenjang] = { total: 0, uploaded: 0 };
+    groupedJenjang[d.jenjang].total++;
+    if (d.dokumen && d.dokumen.startsWith("http")) groupedJenjang[d.jenjang].uploaded++;
+  });
+
+  for (const [jenjang, val] of Object.entries(groupedJenjang)) {
+    const persenJenjang = val.total ? Math.round((val.uploaded / val.total) * 100) : 0;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <p class="text-xs font-medium text-gray-700 mb-1">${jenjang}: ${val.uploaded} dari ${val.total} (${persenJenjang}%)</p>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-green-600 h-2 rounded-full" style="width:${persenJenjang}%"></div>
+      </div>
+    `;
+    perJenjangDiv.appendChild(wrap);
+  }
 }
 
-// Terapkan filter pencarian + kecamatan
+// Filter
 function applyFilters() {
   const keyword = document.getElementById('searchBox').value.toLowerCase();
   const kecamatan = document.getElementById('filterKecamatan').value;
