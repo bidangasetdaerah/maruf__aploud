@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Dokumen Pendukung Inventarisasi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media (max-width: 640px) {
+      table { display: none; }
+      .card-list { display: block; }
+    }
+    @media (min-width: 641px) {
+      .card-list { display: none; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4 sm:p-6">
+  <h1 class="text-2xl sm:text-3xl font-bold mb-6 text-center">Upload Dokumen Pendukung Inventarisasi</h1>
+
+  <!-- Container Data -->
+  <div class="bg-white shadow-md rounded-lg p-4 sm:p-6 w-full overflow-x-auto">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
+      <input type="text" id="searchBox" placeholder="Cari sekolah..." 
+        class="border rounded p-2 text-sm sm:text-base w-full sm:w-64" oninput="applyFilters()"/>
+      
+      <select id="filterKecamatan" onchange="applyFilters()" 
+        class="border rounded p-2 text-sm sm:text-base w-full sm:w-64">
+        <option value="">-- Semua Kecamatan --</option>
+      </select>
+    </div>
+
+    <!-- Progress Upload -->
+    <div id="progressWrapper" class="mb-6">
+      <h2 class="text-base sm:text-lg font-semibold text-gray-800 mb-2">Progress Upload</h2>
+      <p id="progressText" class="text-sm font-semibold text-gray-700 mb-1"></p>
+      <div class="w-full bg-gray-200 rounded-full h-3">
+        <div id="progressBar" class="bg-blue-600 h-3 rounded-full" style="width:0%"></div>
+      </div>
+      <!-- Progress per kecamatan -->
+      <div id="progressPerKec" class="mt-4 space-y-3"></div>
+      <!-- Progress per jenjang -->
+      <div id="progressPerJenjang" class="mt-6 space-y-3"></div>
+      <!-- Progress per status -->
+      <div id="progressPerStatus" class="mt-6 space-y-3"></div>
+    </div>
+
+    <!-- Tabel Desktop -->
+    <table class="table-auto w-full border-collapse border border-gray-300 text-sm sm:text-base">
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="border p-2">Nama Satuan</th>
+          <th class="border p-2">Jenjang</th>
+          <th class="border p-2">Status</th>
+          <th class="border p-2">Kecamatan</th>
+          <th class="border p-2">Dokumen</th>
+          <th class="border p-2">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tabelData"></tbody>
+    </table>
+
+    <!-- Card List Mobile -->
+    <div id="cardList" class="card-list space-y-4"></div>
+
+    <!-- Pagination -->
+    <div class="flex justify-center items-center gap-2 mt-4">
+      <button id="prevBtn" onclick="prevPage()" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm">Prev</button>
+      <span id="pageInfo" class="text-sm"></span>
+      <button id="nextBtn" onclick="nextPage()" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm">Next</button>
+    </div>
+  </div>
+
+<script>
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbypWeAfC6S61qskGWqkLsLR2G0Bh5yALOlYCqmKZX_j-EVeG9jl1FeW0HNnYI5KXuDe/exec";
+
+// Pagination state
+let allData = [];
+let filteredData = [];
+let currentPage = 1;
+const rowsPerPage = 15;
+
+// Convert file → base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Load data awal
+async function loadData() {
+  try {
+    const res = await fetch(`${WEB_APP_URL}?action=getAploudData`);
+    allData = await res.json();
+    filteredData = allData;
+
+    // isi dropdown kecamatan (unik)
+    const kecamatanSet = [...new Set(allData.map(d => d.kecamatan))].sort();
+    const filterKecamatan = document.getElementById('filterKecamatan');
+    filterKecamatan.innerHTML = '<option value="">-- Semua Kecamatan --</option>';
+    kecamatanSet.forEach(kec => {
+      const opt = document.createElement('option');
+      opt.value = kec;
+      opt.textContent = kec;
+      filterKecamatan.appendChild(opt);
+    });
+
+    updateProgress();
+    renderTable();
+  } catch (err) {
+    console.error("Gagal load data:", err);
+  }
+}
+
+// Update progress bar
+function updateProgress() {
+  const total = allData.length;
+  const uploaded = allData.filter(d => d.dokumen && d.dokumen.startsWith("http")).length;
+  const persen = total ? Math.round((uploaded / total) * 100) : 0;
+
+  document.getElementById('progressText').textContent = `Progres Upload: ${uploaded} dari ${total} (${persen}%)`;
+  document.getElementById('progressBar').style.width = persen + "%";
+
+  // progress per kecamatan
+  const perKecDiv = document.getElementById('progressPerKec');
+  perKecDiv.innerHTML = "";
+  const groupedKec = {};
+  allData.forEach(d => {
+    if (!groupedKec[d.kecamatan]) groupedKec[d.kecamatan] = { total: 0, uploaded: 0 };
+    groupedKec[d.kecamatan].total++;
+    if (d.dokumen && d.dokumen.startsWith("http")) groupedKec[d.kecamatan].uploaded++;
+  });
+  for (const [kec, val] of Object.entries(groupedKec)) {
+    const persenKec = val.total ? Math.round((val.uploaded / val.total) * 100) : 0;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <p class="text-xs font-medium text-gray-700 mb-1">${kec}: ${val.uploaded} dari ${val.total} (${persenKec}%)</p>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-blue-600 h-2 rounded-full" style="width:${persenKec}%"></div>
+      </div>
+    `;
+    perKecDiv.appendChild(wrap);
+  }
+
+  // progress per jenjang
+  const perJenjangDiv = document.getElementById('progressPerJenjang');
+  perJenjangDiv.innerHTML = "";
+  const groupedJenjang = {};
+  allData.forEach(d => {
+    if (!groupedJenjang[d.jenjang]) groupedJenjang[d.jenjang] = { total: 0, uploaded: 0 };
+    groupedJenjang[d.jenjang].total++;
+    if (d.dokumen && d.dokumen.startsWith("http")) groupedJenjang[d.jenjang].uploaded++;
+  });
+  for (const [jenjang, val] of Object.entries(groupedJenjang)) {
+    const persenJenjang = val.total ? Math.round((val.uploaded / val.total) * 100) : 0;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <p class="text-xs font-medium text-gray-700 mb-1">${jenjang}: ${val.uploaded} dari ${val.total} (${persenJenjang}%)</p>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-green-600 h-2 rounded-full" style="width:${persenJenjang}%"></div>
+      </div>
+    `;
+    perJenjangDiv.appendChild(wrap);
+  }
+
+  // progress per status
+  const perStatusDiv = document.getElementById('progressPerStatus');
+  perStatusDiv.innerHTML = "";
+  const groupedStatus = {};
+  allData.forEach(d => {
+    if (!groupedStatus[d.status]) groupedStatus[d.status] = { total: 0, uploaded: 0 };
+    groupedStatus[d.status].total++;
+    if (d.dokumen && d.dokumen.startsWith("http")) groupedStatus[d.status].uploaded++;
+  });
+  for (const [status, val] of Object.entries(groupedStatus)) {
+    const persenStatus = val.total ? Math.round((val.uploaded / val.total) * 100) : 0;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <p class="text-xs font-medium text-gray-700 mb-1">${status}: ${val.uploaded} dari ${val.total} (${persenStatus}%)</p>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-purple-600 h-2 rounded-full" style="width:${persenStatus}%"></div>
+      </div>
+    `;
+    perStatusDiv.appendChild(wrap);
+  }
+}
+
+// Filter
+function applyFilters() {
+  const keyword = document.getElementById('searchBox').value.toLowerCase();
+  const kecamatan = document.getElementById('filterKecamatan').value;
+
+  filteredData = allData.filter(d => {
+    const matchNama = d.namaSatuan.toLowerCase().includes(keyword);
+    const matchKec = kecamatan ? d.kecamatan === kecamatan : true;
+    return matchNama && matchKec;
+  });
+
+  currentPage = 1;
+  renderTable();
+}
+
+// Render tabel & card dengan pagination
+function renderTable() {
+  const tabel = document.getElementById('tabelData');
+  const cardList = document.getElementById('cardList');
+  tabel.innerHTML = "";
+  cardList.innerHTML = "";
+
+  const start = (currentPage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
+  const pageData = filteredData.slice(start, end);
+
+  pageData.forEach(item => {
+    const sudahUpload = item.dokumen && item.dokumen.startsWith("http");
+
+    // baris tabel desktop
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="border p-2">${item.namaSatuan}</td>
+      <td class="border p-2">${item.jenjang}</td>
+      <td class="border p-2">${item.status}</td>
+      <td class="border p-2">${item.kecamatan}</td>
+      <td class="border p-2 text-center">
+        ${sudahUpload ? `<a href="${item.dokumen}" target="_blank" class="text-blue-600 underline">Lihat</a>` : "-"}
+      </td>
+      <td class="border p-2 text-center">
+        <input type="file" id="file-${item.namaSatuan}" class="mb-2 text-xs" ${sudahUpload ? "disabled" : ""}/>
+        <button onclick="uploadFileSekolah('${item.namaSatuan}')" 
+          class="px-2 py-1 rounded text-xs ${sudahUpload ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-green-600 text-white hover:bg-green-700'}"
+          ${sudahUpload ? "disabled" : ""}>
+          Upload
+        </button>
+        <p id="status-${item.namaSatuan}" class="text-xs mt-1 text-gray-600">${sudahUpload ? "Sudah upload" : ""}</p>
+      </td>
+    `;
+    tabel.appendChild(tr);
+
+    // kartu mobile
+    const card = document.createElement('div');
+    card.className = "border rounded-lg p-3 shadow-sm";
+    card.innerHTML = `
+      <p class="font-semibold">${item.namaSatuan}</p>
+      <p class="text-sm text-gray-600">Jenjang: ${item.jenjang}</p>
+      <p class="text-sm text-gray-600">Status: ${item.status}</p>
+      <p class="text-sm text-gray-600">Kecamatan: ${item.kecamatan}</p>
+      <p class="mt-1">Dokumen: ${sudahUpload ? `<a href="${item.dokumen}" target="_blank" class="text-blue-600 underline">Lihat</a>` : "-"}</p>
+      <div class="mt-2">
+        <input type="file" id="file-${item.namaSatuan}" class="mb-2 text-xs block w-full" ${sudahUpload ? "disabled" : ""}/>
+        <button onclick="uploadFileSekolah('${item.namaSatuan}')"
+          class="px-3 py-1 rounded text-xs w-full ${sudahUpload ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-green-600 text-white hover:bg-green-700'}"
+          ${sudahUpload ? "disabled" : ""}>
+          Upload
+        </button>
+        <p id="status-${item.namaSatuan}" class="text-xs mt-1 text-gray-600">${sudahUpload ? "Sudah upload" : ""}</p>
+      </div>
+    `;
+    cardList.appendChild(card);
+  });
+
+  // update info pagination
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1;
+  document.getElementById('pageInfo').textContent = `Halaman ${currentPage} dari ${totalPages}`;
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; renderTable(); } }
+function nextPage() { const totalPages = Math.ceil(filteredData.length / rowsPerPage); if (currentPage < totalPages) { currentPage++; renderTable(); } }
+
+// Upload per sekolah
+async function uploadFileSekolah(namaSatuan) {
+  const fileInput = document.getElementById(`file-${namaSatuan}`);
+  const status = document.getElementById(`status-${namaSatuan}`);
+  if (!fileInput || !fileInput.files.length) { alert("Pilih file terlebih dahulu!"); return; }
+
+  status.textContent = "Mengunggah...";
+  try {
+    const file = fileInput.files[0];
+    const base64 = await fileToBase64(file);
+    const payload = { action: "uploadFile", namaSatuan: namaSatuan, base64: base64.split(',')[1], mimeType: file.type };
+
+    const res = await fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify(payload) });
+    const result = await res.json();
+
+    if (result.success) {
+      status.innerHTML = `Upload berhasil! <a href="${result.fileUrl}" target="_blank" class="text-blue-600 underline">Lihat file</a>`;
+      fileInput.disabled = true; const btn = fileInput.nextElementSibling;
+      btn.disabled = true; btn.className = "px-2 py-1 rounded text-xs bg-gray-400 cursor-not-allowed text-white";
+      const satuanData = allData.find(d => d.namaSatuan === namaSatuan);
+      if (satuanData) satuanData.dokumen = result.fileUrl;
+      updateProgress();
+      applyFilters();
+    } else status.textContent = "Gagal upload: " + result.message;
+  } catch (err) { console.error(err); status.textContent = "Terjadi kesalahan saat upload."; }
+}
+
+loadData();
+</script>
+</body>
+</html>
